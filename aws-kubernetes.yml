@@ -29,29 +29,9 @@ test:
     - mkdir -p $CIRCLE_TEST_REPORTS/junit/
     - find . -type f -regex ".*/build/test-results/.*xml" -exec cp {} $CIRCLE_TEST_REPORTS/junit/ \;
 
-deployment:
-  local-dev:
-    branch: /feature-.*/
-    commands:
-      - echo "No Deploy"
-      
-  qa:
-    branch: master
-    commands:
-      - ./deploy.sh
-
-  qa-tagged-deploy:
-    tag: /qa-.*/                  # this is for deploying prod releases in the qa env
-    commands:                     # and for ad-hoc deployments to QA
-      - ./deploy.sh
-
-  integration:
-    branch: master
-    commands:
-      - ./deploy.sh
 
   prod:
     tag: /v[0-9]+(\.[0-9]+)+/   # this does not work they way i want it too :|
     branch: /rc-.*/
     commands:
-      - ./deploy.sh
+      - ./deploy_to_aws_kube.sh

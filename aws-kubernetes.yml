@@ -2,20 +2,32 @@ general:
   branches:
     only:
       - master
-      - /rc-.*/
-      - /feature-.*/
+      - develop
+      - /jira-.*/
 
 machine:
   java:
     version: openjdk8
+    pre:
+      - sudo curl -L -o /usr/bin/docker 'https://s3-external-1.amazonaws.com/circle-downloads/docker-1.9.0-circleci'
+      - sudo chmod 0755 /usr/bin/docker
   services:
     - docker
+
+dependencies:
+  pre:
+   - ./gradlew compileTestJava # need to do this to enable caching
+  cache_directories:
+   - ~/.gradle
+  override:
+  - sudo wget 'https://storage.googleapis.com/kubernetes-release/release/v1.6.2/bin/linux/amd64/kubectl' -O /usr/local/bin/kubectl
+  - sudo chmod 755 /usr/local/bin/kubectl
 
 
 compile:
   override:
-    - ./gradlew clean build -x test     # ./gradlew test runs in the test phase
-    - docker build -t app:$CIRCLE_SHA1 .
+    - ./gradlew clean build  # Build and Test happen in this phase. Annoying. https://discuss.circleci.com/t/gradle-build-phase/1287/3
+    - docker build -t $AWS_ACC_ID.dkr.$AWS_REGION.amazonaws.com/{APPNAME}:$CIRCLE_SHA1 .
 
 
 general:
@@ -23,15 +35,31 @@ general:
     - build/reports/
 
 test:
+  override:
+  - "true"  # gradlew build runs test. Refer to compile step.
   post:
-    - docker run -d -p 8080:8080 --name app app:$CIRCLE_SHA1; sleep 10
-    - curl --retry 4 --retry-delay 4 localhost:8080/app/manage/health | grep UP
+    - docker run -d -p {LOCALPORT}:{LOCALPORT} --name {APPNAME} $AWS_ACC_ID.dkr.$AWS_REGION.amazonaws.com/{APPNAME}:$CIRCLE_SHA1; sleep 10
+    - curl --retry 4 --retry-delay 4 localhost:{LOCALPORT}/{APPNAME}/manage/health | grep UP
+    - curl localhost:{LOCALPORT}/{APPNAME}/manage/info | jq
     - mkdir -p $CIRCLE_TEST_REPORTS/junit/
     - find . -type f -regex ".*/build/test-results/.*xml" -exec cp {} $CIRCLE_TEST_REPORTS/junit/ \;
 
-
-  prod:
-    tag: /v[0-9]+(\.[0-9]+)+/   # this does not work they way i want it too :|
-    branch: /rc-.*/
+deployment:
+  local-dev:
+    branch: /jira-.*/
     commands:
-      - ./deploy_to_aws_kube.sh
+      - echo "Feature branches are not deployed"
+
+  develop:
+    branch: develop
+    commands:
+      - echo "develop"
+      - ./deploy.sh
+        --app_name {APPNAME}
+
+  qa:
+    branch: master
+    commands:
+      - echo "qa"
+      - ./deploy.sh
+        --app_name {APPNAME}
